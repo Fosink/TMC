@@ -37,9 +37,9 @@ class BasicMAC_3s_vs_4z:
         self.msg_rnn = RNN_msg(64,10,10).cuda()
         self.epsilon = 1e-10
         self.hidden_states = None
-        self.transmit_gap = th.zeros((24)).cuda()
-        self.receive_gap = th.zeros((8,3,3)).cuda()
-        self.msg_old_test = th.zeros((24,10)).cuda()
+        self.transmit_gap = th.zeros((24)).cuda()       # time gap since last transmit, for sender to check timeout 
+        self.receive_gap = th.zeros((8,3,3)).cuda()     # time gap since last receive, for receiver to check timeout
+        self.msg_old_test = th.zeros((24,10)).cuda()    # sender buffer
         self.msg_old_test_reshape = th.zeros((8,3,3,10)).cuda()    
         
         ##################hyperparameters######################
@@ -56,7 +56,7 @@ class BasicMAC_3s_vs_4z:
         agent_local_outputs, input_hidden_states, vi = self.forward(ep_batch, t_ep, test_mode=test_mode)
         # store all the actions
         input_hidden_states = input_hidden_states.view(-1,64)
-        self.hidden_states_msg, dummy = self.msg_rnn(self.hidden_states_msg, input_hidden_states)
+        self.hidden_states_msg, dummy = self.msg_rnn(self.e, input_hidden_states)
         dummy = dummy.reshape(8,3,10)
         dummy0 = dummy[:,0,:]
         dummy1 = dummy[:,1,:]
@@ -70,11 +70,14 @@ class BasicMAC_3s_vs_4z:
         chosen_actions = self.action_selector.select_action(agent_outputs[bs], avail_actions[bs], t_env, test_mode=test_mode)
 
         return chosen_actions
-
+    # 该方法用于在一个episode中每个时刻为所有智能体选择动作。
+    # t_ep代表当前样本在一个episode中的时间索引。t_env代表当前时刻环境运行的总时间，用于计算epsilon-greedy中的epsilon。
     def select_actions_noisy_env(self, loss_pattern, ep_batch, t_ep, t_env, bs=slice(None), test_mode=False):
         # Only select actions for the selected batch elements in bs
         avail_actions = ep_batch["avail_actions"][:, t_ep]
+        # 获得episode内每个时刻的观测对应的所有动作的Q值与隐层变量mac.hidden_states
         agent_local_outputs, input_hidden_states, vi = self.forward(ep_batch, t_ep, test_mode=test_mode)
+        
         # store all the actions
         input_hidden_states = input_hidden_states.view(-1,64)
         self.hidden_states_msg, dummy = self.msg_rnn(self.hidden_states_msg, input_hidden_states)
@@ -112,6 +115,11 @@ class BasicMAC_3s_vs_4z:
         chosen_actions = self.action_selector.select_action(agent_outputs[bs], avail_actions[bs], t_env, test_mode=test_mode)
 
         return chosen_actions
+    
+    # ep_batch表示一个episode的样本，t表示每个样本在该episode内的时间索引，
+    # forward()方法的作用是输出一个episode内每个时刻的观测对应的所有动作的Q值与隐层变量mac.hidden_states。
+    # 由于QMix算法采用的是DRQN网络，因此每个episode的样本必须与mac.hidden_states一起连续输入到神经网络中，
+    # 当t变量为0时，即当一个episode第一个时刻的样本输入到神经网络时，mac.hidden_states初始化为0，此后在同一个episode中，mac.hidden_states会持续得到更新。
     
     def forward(self, ep_batch, t, test_mode=False):
         agent_inputs, visibility_matrix = self._build_inputs(ep_batch, t)
