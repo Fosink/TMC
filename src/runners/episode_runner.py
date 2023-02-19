@@ -4,7 +4,9 @@ from components.episode_buffer import EpisodeBatch
 import numpy as np
 import torch as th
 
-
+# runner对象属于自定义的runner.episode_runner.EpisodeRunner类，该对象的主要作用是 运行环境以产生训练样本，
+# 因此runner对象中的一个重要属性就是env.multiagentenv.MultiAgentEnv类的环境对象runner.env，即环境，
+# 而另一个属性是components.episode_buffer.EpisodeBatch类的episode样本存储器对象runner.batch，该对象用于以episode为单位存储环境运行所产生的样本。
 class EpisodeRunner:
 
     def __init__(self, args, logger):
@@ -147,7 +149,8 @@ class EpisodeRunner:
                 state = next_state
         loss_pattern = th.stack(([loss_pattern]*11),dim = 2).cuda()
         return loss_pattern          
-        
+    
+    # 利用当前智能体mac在环境中运行（需要用到mac对象），产生一个episode的样本数据episode_batch，存储在runner.batch中。
     def run(self, test_mode=False):
         self.reset()
 
